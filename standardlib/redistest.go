@@ -13,7 +13,6 @@ import (
 var (
 	numMsgs = 0
 	verbose = false
-	delay   = time.Microsecond
 	nGot    int64
 )
 
@@ -21,7 +20,6 @@ func main() {
 	log.SetFlags(log.Lshortfile)
 	flag.IntVar(&numMsgs, "n", 1000, "number of messages to send")
 	flag.BoolVar(&verbose, "v", false, "vervose output")
-	flag.DurationVar(&delay, "delay", time.Microsecond, "how long to wait")
 	flag.Parse()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 
@@ -55,9 +53,8 @@ func main() {
 }
 
 func publish(rdb *redis.Client, ctx context.Context) {
-	tick := time.NewTicker(delay)
 
-	for range tick.C {
+	for {
 		err := rdb.Publish(ctx, "ch", "payload").Err()
 		if errors.Is(err, context.Canceled) {
 			break
