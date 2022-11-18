@@ -13,33 +13,17 @@ func main() {
 
 	}
 	defer c.Close()
-	err = c.Send("SUBSCRIBE", "ch")
-	if err != nil {
-		log.Fatalln(err)
-	}
-	err = c.Flush()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
+	psc := redis.PubSubConn{Conn: c}
+	psc.Subscribe("ch")
 	for {
-		reply, err := c.Receive()
-		if err != nil {
-			log.Fatalln(err)
+		switch v := psc.Receive().(type) {
+		case redis.Message:
+			fmt.Printf("%s: message: %s\n", v.Channel, v.Data)
+		case redis.Subscription:
+			fmt.Printf("%s: %s %d\n", v.Channel, v.Kind, v.Count)
+		case error:
+			log.Fatalln(v)
 		}
-		arr, ok := reply.([]interface{})
-		if !ok {
-			continue
-		}
-
-		for _, w := range arr {
-			_, ok := w.([]byte)
-			pat := "%v "
-			if ok {
-				pat = "%s "
-			}
-			fmt.Printf(pat, w)
-		}
-		fmt.Println()
 	}
+
 }
