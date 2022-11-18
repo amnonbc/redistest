@@ -11,14 +11,16 @@ import (
 )
 
 var (
-	numMsgs   = 0
-	verbose   = false
-	batchSize = 1
+	numMsgs    = 0
+	verbose    = false
+	batchSize  = 1
+	concurrent = false
 )
 
 func main() {
 	flag.IntVar(&numMsgs, "n", 10000, "number of messages to send")
-	flag.IntVar(&batchSize, "b", 100, "size of batch to publish")
+	flag.IntVar(&batchSize, "batchsize", 100, "size of batch to publish")
+	flag.BoolVar(&concurrent, "concurrent", true, "do each publish in a goroutine")
 	flag.BoolVar(&verbose, "v", false, "vervose output")
 	flag.Parse()
 	c, err := rueidis.NewClient(rueidis.ClientOption{InitAddress: []string{"127.0.0.1:6379"}})
@@ -30,7 +32,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	start := time.Now()
-	if batchSize > 1 {
+	if concurrent {
+		go concurrentPublisher(ctx, c)
+	} else if batchSize > 1 {
 		go batchPublisher(ctx, c)
 	} else {
 		go publisher(ctx, c)
@@ -75,5 +79,19 @@ func batchPublisher(ctx context.Context, c rueidis.Client) {
 				log.Println("error publishing", err)
 			}
 		}
+	}
+}
+
+func concurrentPublisher(ctx context.Context, c rueidis.Client) {
+	for i := 0; i < numMsgs; i++ {
+		go func() {
+			err := c.Do(context.Background(), c.B().Publish().Channel("ch").Message("msg").Build()).Error()
+			if errors.Is(err, context.Canceled) {
+				return
+			}
+			if err != nil {
+				log.Println("publish", err)
+			}
+		}()
 	}
 }
