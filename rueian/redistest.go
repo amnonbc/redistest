@@ -11,12 +11,14 @@ import (
 )
 
 var (
-	numMsgs = 0
-	verbose = false
+	numMsgs   = 0
+	verbose   = false
+	batchSize = 1
 )
 
 func main() {
 	flag.IntVar(&numMsgs, "n", 10000, "number of messages to send")
+	flag.IntVar(&batchSize, "b", 100, "size of batch to publish")
 	flag.BoolVar(&verbose, "v", false, "vervose output")
 	flag.Parse()
 	c, err := rueidis.NewClient(rueidis.ClientOption{InitAddress: []string{"127.0.0.1:6379"}})
@@ -28,7 +30,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	start := time.Now()
-	go publisher(ctx, c)
+	if batchSize > 1 {
+		go batchPublisher(ctx, c)
+	} else {
+		go publisher(ctx, c)
+	}
 	var got int64
 	err = c.Receive(ctx, c.B().Subscribe().Channel("ch").Build(), func(msg rueidis.PubSubMessage) {
 		n := atomic.AddInt64(&got, 1)
@@ -53,6 +59,21 @@ func publisher(ctx context.Context, c rueidis.Client) {
 		}
 		if err != nil {
 			panic(err)
+		}
+	}
+}
+
+func batchPublisher(ctx context.Context, c rueidis.Client) {
+	msgs := make(rueidis.Commands, batchSize)
+	for n := 0; n < numMsgs; n += batchSize {
+		for i := range msgs {
+			msgs[i] = c.B().Publish().Channel("ch").Message("msg").Build()
+		}
+		for _, resp := range c.DoMulti(ctx, msgs...) {
+			err := resp.Error()
+			if err != nil {
+				log.Println("error publishing", err)
+			}
 		}
 	}
 }
