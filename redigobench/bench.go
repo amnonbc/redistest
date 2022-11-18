@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gomodule/redigo/redis"
 	"log"
 )
@@ -12,14 +13,33 @@ func main() {
 
 	}
 	defer c.Close()
-	c.Send("SUBSCRIBE", "mychannel1")
-	c.Flush()
+	err = c.Send("SUBSCRIBE", "ch")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	err = c.Flush()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	for {
 		reply, err := c.Receive()
 		if err != nil {
 			log.Fatalln(err)
 		}
-		log.Println(reply)
-		// process pushed message
+		arr, ok := reply.([]interface{})
+		if !ok {
+			continue
+		}
+
+		for _, w := range arr {
+			_, ok := w.([]byte)
+			pat := "%v "
+			if ok {
+				pat = "%s "
+			}
+			fmt.Printf(pat, w)
+		}
+		fmt.Println()
 	}
 }
